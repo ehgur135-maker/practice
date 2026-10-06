@@ -1,151 +1,425 @@
+
 import streamlit as st
-import pandas as pd
-import math
-from pathlib import Path
+import streamlit.components.v1 as components
 
-# Set the title and favicon that appear in the Browser's tab bar.
 st.set_page_config(
-    page_title='GDP dashboard',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
+    page_title="기사의 여행",
+    page_icon="♞"
 )
 
-# -----------------------------------------------------------------------------
-# Declare some useful functions.
+st.title("♞ 기사의 여행")
 
-@st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
-
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
-    """
-
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
-
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
-
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
-    )
-
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
-
-    return gdp_df
-
-gdp_df = get_gdp_data()
-
-# -----------------------------------------------------------------------------
-# Draw the actual page
-
-# Set the title that appears at the top of the page.
-'''
-# :earth_americas: GDP dashboard
-
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
-'''
-
-# Add some spacing
-''
-''
-
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
-
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
-
-countries = gdp_df['Country Code'].unique()
-
-if not len(countries):
-    st.warning("Select at least one country")
-
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN'])
-
-''
-''
-''
-
-# Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
-]
-
-st.header('GDP over time', divider='gray')
-
-''
-
-st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
+st.write(
+    "기사를 직접 움직여 체스판의 모든 칸을 한 번씩 방문해 보세요."
 )
 
-''
-''
+n = st.selectbox(
+    "체스판 크기",
+    [5, 6, 7, 8],
+    index=3
+)
+
+html = f"""
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<style>
+
+body {{
+    font-family: sans-serif;
+}}
+
+#info {{
+    text-align: center;
+    font-size: 20px;
+    margin: 15px;
+}}
+
+#board {{
+    display: grid;
+    grid-template-columns: repeat({n}, 70px);
+    width: fit-content;
+    margin: 30px auto;
+    border: 4px solid #222;
+}}
+
+.cell {{
+    width: 70px;
+    height: 70px;
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+    font-size: 35px;
+    cursor: pointer;
+
+    box-sizing: border-box;
+}}
+
+.light {{
+    background-color: #f0d9b5;
+}}
+
+.dark {{
+    background-color: #b58863;
+}}
+
+.possible {{
+    background-color: #90ee90;
+}}
+
+.current {{
+    background-color: #ffd700;
+}}
+
+.visited {{
+    background-color: #9ec5fe;
+}}
+
+.number {{
+    font-size: 18px;
+    font-weight: bold;
+}}
+
+#message {{
+    text-align: center;
+    font-size: 18px;
+    margin: 15px;
+}}
+
+#reset {{
+    display: block;
+    margin: 20px auto;
+    padding: 10px 25px;
+
+    font-size: 17px;
+    font-weight: bold;
+
+    border: none;
+    border-radius: 8px;
+
+    background-color: #555;
+    color: white;
+
+    cursor: pointer;
+}}
+
+#reset:hover {{
+    background-color: #333;
+}}
+
+</style>
+
+</head>
 
 
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
+<body>
 
-st.header(f'GDP in {to_year}', divider='gray')
+<div id="info">
+    시작할 칸을 선택하세요.
+</div>
 
-''
+<div id="board"></div>
 
-cols = st.columns(4)
+<div id="message"></div>
 
-for i, country in enumerate(selected_countries):
-    col = cols[i % len(cols)]
+<button id="reset" onclick="resetGame()">
+    🔄 다시 시작
+</button>
 
-    with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
 
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
-        else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
+<script>
 
-        st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
-        )
+const n = {n};
+
+const board = document.getElementById("board");
+
+const info = document.getElementById("info");
+
+const message = document.getElementById("message");
+
+
+let currentRow = null;
+let currentCol = null;
+
+let path = [];
+
+
+// ------------------------------------------------
+// 기사 이동 규칙
+// ------------------------------------------------
+
+function isKnightMove(r, c) {{
+
+    if (currentRow === null) {{
+        return false;
+    }}
+
+    const dr = Math.abs(r - currentRow);
+    const dc = Math.abs(c - currentCol);
+
+    return (
+        (dr === 2 && dc === 1) ||
+        (dr === 1 && dc === 2)
+    );
+}}
+
+
+// ------------------------------------------------
+// 현재 위치에서 이동 가능한 칸 찾기
+// ------------------------------------------------
+
+function getPossibleMoves() {{
+
+    const moves = [];
+
+    for (let r = 0; r < n; r++) {{
+
+        for (let c = 0; c < n; c++) {{
+
+            const alreadyVisited = path.some(
+                p => p[0] === r && p[1] === c
+            );
+
+            if (alreadyVisited) {{
+                continue;
+            }}
+
+            if (isKnightMove(r, c)) {{
+                moves.push([r, c]);
+            }}
+        }}
+    }}
+
+    return moves;
+}}
+
+
+// ------------------------------------------------
+// 체스판 그리기
+// ------------------------------------------------
+
+function drawBoard() {{
+
+    board.innerHTML = "";
+
+    const possibleMoves = getPossibleMoves();
+
+    for (let r = 0; r < n; r++) {{
+
+        for (let c = 0; c < n; c++) {{
+
+            const cell = document.createElement("div");
+
+            cell.classList.add("cell");
+
+
+            // 체스판 색
+            if ((r + c) % 2 === 0) {{
+                cell.classList.add("light");
+            }}
+            else {{
+                cell.classList.add("dark");
+            }}
+
+
+            // 방문 순서
+            const index = path.findIndex(
+                p => p[0] === r && p[1] === c
+            );
+
+
+            // 방문했던 칸
+            if (index !== -1) {{
+
+                cell.classList.add("visited");
+
+                const number = document.createElement("span");
+
+                number.classList.add("number");
+
+                number.textContent = index + 1;
+
+                cell.appendChild(number);
+            }}
+
+
+            // 현재 위치
+            if (
+                r === currentRow &&
+                c === currentCol
+            ) {{
+
+                cell.classList.add("current");
+
+                cell.innerHTML = "♞";
+            }}
+
+
+            // 이동 가능한 칸
+            const isPossible = possibleMoves.some(
+                p => p[0] === r && p[1] === c
+            );
+
+            if (isPossible) {{
+
+                cell.classList.add("possible");
+            }}
+
+
+            // 클릭
+            cell.onclick = function() {{
+
+                moveKnight(r, c);
+
+            }};
+
+
+            board.appendChild(cell);
+        }}
+    }}
+
+
+    // 정보 표시
+    if (currentRow === null) {{
+
+        info.innerHTML =
+            "시작할 칸을 선택하세요.";
+
+    }}
+    else {{
+
+        info.innerHTML =
+            "현재 위치: (" +
+            (currentRow + 1) +
+            ", " +
+            (currentCol + 1) +
+            ") &nbsp;&nbsp; | &nbsp;&nbsp;" +
+            "이동 가능한 칸: <b>" +
+            possibleMoves.length +
+            "개</b>";
+
+    }}
+}}
+
+
+// ------------------------------------------------
+// 기사 이동
+// ------------------------------------------------
+
+function moveKnight(r, c) {{
+
+    message.innerHTML = "";
+
+
+    // 첫 번째 이동
+    if (currentRow === null) {{
+
+        currentRow = r;
+        currentCol = c;
+
+        path.push([r, c]);
+
+        drawBoard();
+
+        return;
+    }}
+
+
+    // 이미 방문한 칸
+    const alreadyVisited = path.some(
+        p => p[0] === r && p[1] === c
+    );
+
+    if (alreadyVisited) {{
+
+        message.innerHTML =
+            "❌ 이미 방문한 칸입니다.";
+
+        return;
+    }}
+
+
+    // 기사 이동 규칙
+    if (!isKnightMove(r, c)) {{
+
+        message.innerHTML =
+            "❌ 기사는 L자 모양으로 이동해야 합니다.";
+
+        return;
+    }}
+
+
+    // 이동
+    currentRow = r;
+    currentCol = c;
+
+    path.push([r, c]);
+
+    drawBoard();
+
+
+    // 모든 칸 방문
+    if (path.length === n * n) {{
+
+        info.innerHTML =
+            "🎉 <b>성공!</b> 모든 칸을 방문했습니다!";
+
+        message.innerHTML =
+            "기사의 여행을 완성했습니다!";
+
+        return;
+    }}
+
+
+    // 더 이상 이동할 수 없는 경우
+    const possibleMoves = getPossibleMoves();
+
+    if (possibleMoves.length === 0) {{
+
+        message.innerHTML =
+            "⚠️ 더 이상 이동할 수 있는 칸이 없습니다.";
+
+    }}
+
+}}
+
+
+// ------------------------------------------------
+// 다시 시작
+// ------------------------------------------------
+
+function resetGame() {{
+
+    currentRow = null;
+    currentCol = null;
+
+    path = [];
+
+    message.innerHTML = "";
+
+    drawBoard();
+}}
+
+
+// ------------------------------------------------
+// 처음 체스판 표시
+// ------------------------------------------------
+
+drawBoard();
+
+</script>
+
+</body>
+
+</html>
+"""
+
+components.html(
+    html,
+    height=750
+)
