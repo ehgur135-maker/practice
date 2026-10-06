@@ -4,7 +4,7 @@ import streamlit.components.v1 as components
 
 st.set_page_config(
     page_title="기사의 여행",
-    page_icon="♞"
+    page_icon="knight.png"
 )
 
 st.title("♞ 기사의 여행")
